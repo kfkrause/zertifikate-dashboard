@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/kurse.js": {
+      "maxDuration": 30
+    }
+  }
+}

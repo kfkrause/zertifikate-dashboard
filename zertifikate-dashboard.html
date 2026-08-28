@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zertifikate Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+      color: #333;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    h1 { font-size: 28px; margin-bottom: 10px; }
+    .info { font-size: 13px; color: #666; margin-bottom: 20px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    th {
+      background: #2c3e50;
+      color: white;
+      padding: 12px 8px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    td {
+      padding: 10px 8px;
+      border-bottom: 1px solid #eee;
+      font-size: 13px;
+    }
+    tr:hover { background: #f9f9f9; }
+    input { width: 80px; padding: 4px 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; }
+    input:focus { outline: none; border-color: #2c3e50; background: #f0f4f8; }
+    button {
+      padding: 4px 8px;
+      background: #e74c3c;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    button:hover { background: #c0392b; }
+    .ampel { width: 20px; height: 20px; border-radius: 50%; display: inline-block; }
+    .sicher { background: #27ae60; }
+    .warnung { background: #f39c12; }
+    .gefahr { background: #e74c3c; }
+    .number { text-align: right; font-family: 'Courier New', monospace; }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin: 20px 0;
+    }
+    .card {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .card-label { font-size: 12px; color: #666; margin-bottom: 4px; }
+    .card-value { font-size: 18px; font-weight: 600; }
+    .green { color: #27ae60; }
+    .red { color: #e74c3c; }
+    .instruction { background: #ecf0f1; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Zertifikate Dashboard</h1>
+    <p class="info">Letzte Aktualisierung: <span id="lastUpdate">nie</span> | <button onclick="exportData()" style="width: auto; padding: 6px 12px;">Daten exportieren</button></p>
+    
+  <div class="instruction">
+      <strong>Anleitung:</strong> Gib den aktuellen Zertifikat-Kurs in die Spalte "Kurs aktuell" ein und drücke Tab. 
+      Die Underlying-Kurse werden **automatisch aktualisiert** (alle 5 Minuten). Der Rest wird automatisch berechnet.
+      <button onclick="manualUpdateUnderlyings()" style="width: auto; padding: 6px 12px; margin-left: 20px;">Jetzt aktualisieren</button>
+    </div>
+
+    <div class="summary">
+      <div class="card">
+        <div class="card-label">Gesamter Einstand €</div>
+        <div class="card-value number" id="totalEinstand">0,00</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Zwischenergebnis €</div>
+        <div class="card-value number" id="totalZwischen">0,00</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Rendite %</div>
+        <div class="card-value number" id="totalRendite">0,00</div>
+      </div>
+    </div>
+
+    <table id="table">
+      <thead>
+        <tr>
+          <th>ISIN</th>
+          <th>Typ</th>
+          <th>Underlying</th>
+          <th>Kaufkurs €</th>
+          <th>Anzahl</th>
+          <th>Kosten €</th>
+          <th>Einstand €</th>
+          <th>Kurs aktuell €</th>
+          <th>Zwischenergebnis €</th>
+          <th>Zahlg. Ziel €</th>
+          <th>Erw. Ergebnis €</th>
+          <th>Barriere</th>
+          <th>Abstand %</th>
+          <th>Ampel</th>
+          <th>Fälligkeit</th>
+          <th>Löschen</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <script>
+    const data = [
+      { isin: 'DE000VY3C2P9', typ: 'Bonus', underlying: 'Intel', kauf: 89.98, anzahl: 20, kosten: 7.91, zahlZiel: 110, barriere: 80, fälligkeit: '18.09.2026' },
+      { isin: 'DE000GN0QA05', typ: 'Reverse Bonus', underlying: 'Bayer', kauf: 45, anzahl: 20, kosten: 12, zahlZiel: 51, barriere: 55, fälligkeit: '16.10.2026' },
+      { isin: 'DE000LB65Q99', typ: 'Bonus', underlying: 'RWE', kauf: 75, anzahl: 20, kosten: 7.91, zahlZiel: 83, barriere: 50, fälligkeit: '16.12.2026' },
+      { isin: 'DE000BD30TZ1', typ: 'Aktienanleihe', underlying: 'Prysmian', kauf: 969.2, anzahl: 1, kosten: 7.91, formula: (k) => 210 + (8 * k), barriere: 125, fälligkeit: '17.12.2026' },
+      { isin: 'DE000BD317G0', typ: 'Aktienanleihe', underlying: 'Intel', kauf: 980.88, anzahl: 1, kosten: 0, formula: (k) => 320 + (11.11 * k), barriere: 77.59, fälligkeit: '18.12.2026' },
+      { isin: 'DE000GN1XS70', typ: 'Reverse Bonus', underlying: 'Lufthansa', kauf: 7.2, anzahl: 140, kosten: 10, zahlZiel: 8, barriere: 10, fälligkeit: '20.11.2026' },
+      { isin: 'DE000GN2NKL1', typ: 'Reverse Bonus', underlying: 'Adidas', kauf: 106.89, anzahl: 10, kosten: 23, zahlZiel: 128, barriere: 180, fälligkeit: '20.11.2026' },
+      { isin: 'DE000PJ8HUR1', typ: 'Aktienanleihe', underlying: 'Beiersdorf', kauf: 85.11, anzahl: 100, kosten: 23, formula: (k) => (105 * k) + 634, barriere: 95, fälligkeit: '18.09.2026' },
+      { isin: 'DE000LB34H98', typ: 'Bonus', underlying: 'VW', kauf: 132.7, anzahl: 15, kosten: 30, zahlZiel: 165, barriere: 64.53, fälligkeit: '18.11.2026' }
+    ];
+
+    function calcEinstand(row) { return (row.kauf * row.anzahl + row.kosten).toFixed(2); }
+    function calcZwischen(row, kurs) { return kurs ? ((kurs * row.anzahl - calcEinstand(row)).toFixed(2)) : ''; }
+    function getAmpelStatus(abstand) {
+      if (!abstand || abstand === '') return '';
+      const pct = parseFloat(abstand);
+      if (pct < 5) return 'GEFAHR';
+      if (pct < 12) return 'WARNUNG';
+      return 'SICHER';
+    }
+
+    function loadData() {
+      const stored = localStorage.getItem('zertifikate_kurse');
+      if (!stored) return {};
+      try { return JSON.parse(stored); } catch { return {}; }
+    }
+
+    function saveData(kurse) {
+      localStorage.setItem('zertifikate_kurse', JSON.stringify(kurse));
+      document.getElementById('lastUpdate').textContent = new Date().toLocaleString('de-DE');
+      updateSummary();
+    }
+
+    function updateSummary() {
+      const kurse = loadData();
+      let totalEinstand = 0, totalZwischen = 0;
+      data.forEach(row => {
+        const einstand = parseFloat(calcEinstand(row));
+        totalEinstand += einstand;
+        const kurs = parseFloat(kurse[row.isin] || 0);
+        if (kurs > 0) totalZwischen += kurs * row.anzahl - einstand;
+      });
+      const rendite = totalEinstand > 0 ? ((totalZwischen / totalEinstand) * 100).toFixed(2) : '0.00';
+      document.getElementById('totalEinstand').textContent = totalEinstand.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      document.getElementById('totalZwischen').textContent = (totalZwischen >= 0 ? '+' : '') + totalZwischen.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      document.getElementById('totalRendite').textContent = (rendite >= 0 ? '+' : '') + rendite + '%';
+      if (totalZwischen < 0) {
+        document.getElementById('totalZwischen').style.color = '#e74c3c';
+        document.getElementById('totalRendite').style.color = '#e74c3c';
+      } else {
+        document.getElementById('totalZwischen').style.color = '#27ae60';
+        document.getElementById('totalRendite').style.color = '#27ae60';
+      }
+    }
+
+    function renderTable() {
+      const kurse = loadData();
+      const tbody = document.getElementById('tbody');
+      tbody.innerHTML = '';
+      data.forEach(row => {
+        const zertKurs = kurse[row.isin] || '';
+        const underlyingKurs = kurse['underlying_' + row.isin] || '';
+        const einstand = calcEinstand(row);
+        const zwischen = calcZwischen(row, zertKurs);
+        
+        let zahlZiel = '';
+        if (row.zahlZiel) {
+          zahlZiel = row.zahlZiel;
+        } else if (row.formula && underlyingKurs) {
+          zahlZiel = (row.formula(parseFloat(underlyingKurs))).toFixed(2);
+        }
+        
+        let erwErgebnis = '';
+        if (zahlZiel) {
+          erwErgebnis = ((parseFloat(zahlZiel) * row.anzahl) - parseFloat(einstand)).toFixed(2);
+        }
+        
+        // Abstand zur Barriere basierend auf UNDERLYING-Kurs
+        let abstand = '';
+        if (underlyingKurs && parseFloat(underlyingKurs) > 0) {
+          const uk = parseFloat(underlyingKurs);
+          const bar = parseFloat(row.barriere);
+          if (row.typ === 'Reverse Bonus') {
+            abstand = (((bar - uk) / uk) * 100).toFixed(2);
+          } else {
+            abstand = (((uk - bar) / uk) * 100).toFixed(2);
+          }
+        }
+        
+        const ampel = getAmpelStatus(abstand);
+        const tr = document.createElement('tr');
+        
+        let underlyingInput = '';
+        if (row.formula) {
+          underlyingInput = `<span style="color: #27ae60; font-weight: 600;">${underlyingKurs || '-'}</span>`;
+        }
+        
+        tr.innerHTML = `
+          <td>${row.isin}</td>
+          <td>${row.typ}</td>
+          <td>${row.underlying}</td>
+          <td class="number">${row.kauf.toFixed(2)}</td>
+          <td class="number">${row.anzahl}</td>
+          <td class="number">${row.kosten.toFixed(2)}</td>
+          <td class="number">${einstand}</td>
+          <td><input type="number" step="0.01" value="${zertKurs}" placeholder="z.B. 92,50" 
+            onchange="updateKurs('${row.isin}', this.value)" onkeyup="if(event.key==='Enter') this.blur()"></td>
+          <td class="number" style="color: ${zwischen === '' ? '#999' : zwischen >= 0 ? '#27ae60' : '#e74c3c'}">${zwischen || '-'}</td>
+          <td class="number">${zahlZiel || (row.formula ? underlyingInput : '-')}</td>
+          <td class="number" style="color: ${erwErgebnis === '' ? '#999' : erwErgebnis >= 0 ? '#27ae60' : '#e74c3c'}">${erwErgebnis || '-'}</td>
+          <td class="number">${row.barriere.toFixed(2)}</td>
+          <td class="number" style="color: ${abstand === '' ? '#999' : abstand >= 0 ? '#27ae60' : '#e74c3c'}">${abstand || '-'}</td>
+          <td><div class="ampel ${ampel.toLowerCase()}" title="${ampel || '-'}"></div></td>
+          <td>${row.fälligkeit}</td>
+          <td><button onclick="deleteRow('${row.isin}')">×</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+      updateSummary();
+    }
+
+    function updateKurs(isin, value) {
+      const kurse = loadData();
+      if (value === '') delete kurse[isin];
+      else kurse[isin] = parseFloat(value);
+      saveData(kurse);
+      renderTable();
+    }
+
+    function deleteRow(isin) {
+      if (confirm(`Zertifikat ${isin} löschen?`)) {
+        const kurse = loadData();
+        delete kurse[isin];
+        saveData(kurse);
+        renderTable();
+      }
+    }
+
+    renderTable();
+    updateUnderlyingsFromBackend();
+    setInterval(updateUnderlyingsFromBackend, 300000); // Alle 5 Minuten
+
+    function manualUpdateUnderlyings() {
+      document.getElementById('lastUpdate').textContent = 'wird aktualisiert...';
+      updateUnderlyingsFromBackend();
+    }
+
+    async function updateUnderlyingsFromBackend() {
+      try {
+        // Backend URL — später wird das auf deine Vercel-Domain geändert
+        const backendUrl = 'https://zertifikate-dashboard.vercel.app/api/kurse';
+        const resp = await fetch(backendUrl);
+        const data = await resp.json();
+        
+        if (data.kurse) {
+          const kurse = loadData();
+          
+          // Kurse ins localStorage speichern
+          Object.entries(data.kurse).forEach(([isin, kurs]) => {
+            if (kurs) {
+              kurse['underlying_' + isin] = kurs;
+            }
+          });
+          
+          localStorage.setItem('zertifikate_kurse', JSON.stringify(kurse));
+          renderTable();
+          document.getElementById('lastUpdate').textContent = new Date().toLocaleString('de-DE');
+        }
+      } catch (e) {
+        console.log('Fehler beim Abrufen der Kurse vom Backend:', e);
+      }
+    }
+
+    renderTable();
+  </script>
+</body>
+</html>
